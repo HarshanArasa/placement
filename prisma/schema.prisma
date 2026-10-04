@@ -1,0 +1,402 @@
+// OpportunityHub — Prisma Schema
+// Production-quality normalized PostgreSQL schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum UserRole {
+  STUDENT
+  ADMIN
+  MODERATOR
+}
+
+enum OpportunityType {
+  INTERNSHIP
+  PLACEMENT
+  BOTH
+}
+
+enum WorkMode {
+  REMOTE
+  HYBRID
+  ONSITE
+  MULTIPLE
+}
+
+enum OpportunityStatus {
+  UPCOMING
+  ACTIVE
+  CLOSING_SOON
+  CLOSED
+  EXPIRED
+  PAUSED
+}
+
+enum SourceType {
+  COMPANY_CAREERS
+  JOB_BOARD
+  INTERNSHIP_PLATFORM
+  COLLEGE
+  ADMIN
+  API
+  OTHER
+}
+
+enum NotificationType {
+  NEW_OPPORTUNITY
+  DEADLINE_REMINDER
+  COMPANY_HIRING
+  OPPORTUNITY_CLOSING
+  OPPORTUNITY_REOPENED
+  SYSTEM
+}
+
+enum OpportunityEventType {
+  CREATED
+  UPDATED
+  ACTIVATED
+  CLOSING_SOON
+  CLOSED
+  REOPENED
+  DEADLINE_CHANGED
+  PAUSED
+  EXPIRED
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         UserRole @default(STUDENT)
+  profileImage   String?
+  graduationYear Int?
+  branch         String?
+  college        String?
+  location       String?
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  preference          UserPreference?
+  savedOpportunities  SavedOpportunity[]
+  followedCompanies   FollowedCompany[]
+  notifications       Notification[]
+  notificationPref    NotificationPreference?
+  applicationClicks   ApplicationClick[]
+  markedApplications  MarkedApplication[]
+
+  @@index([email])
+  @@index([role])
+  @@map("users")
+}
+
+model Company {
+  id          String  @id @default(cuid())
+  name        String
+  slug        String  @unique
+  description String?
+  logoUrl     String?
+  websiteUrl  String?
+  industry    String?
+  companySize String?
+  isVerified  Boolean @default(false)
+  isActive    Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  opportunities   Opportunity[]
+  followedBy      FollowedCompany[]
+  notifications   Notification[]
+
+  @@index([slug])
+  @@index([name])
+  @@index([isVerified])
+  @@map("companies")
+}
+
+model Source {
+  id         String     @id @default(cuid())
+  name       String
+  slug       String     @unique
+  websiteUrl String?
+  type       SourceType @default(OTHER)
+  isActive   Boolean    @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  opportunities Opportunity[]
+
+  @@index([slug])
+  @@index([type])
+  @@index([isActive])
+  @@map("sources")
+}
+
+model Opportunity {
+  id        String @id @default(cuid())
+  companyId String
+  sourceId  String
+
+  title             String
+  slug              String            @unique
+  opportunityType   OpportunityType
+  description       String?
+  responsibilities  String?
+  eligibility       String?
+  branchEligibility String?
+
+  location String?
+  workMode WorkMode @default(ONSITE)
+
+  salaryMin       Float?
+  salaryMax       Float?
+  salaryCurrency  String  @default("INR")
+  stipendMin      Float?
+  stipendMax      Float?
+  stipendCurrency String @default("INR")
+
+  duration      String?
+  experienceMin Int?
+  experienceMax Int?
+
+  graduationYear Int?
+
+  postedAt   DateTime?
+  startDate  DateTime?
+  deadline   DateTime?
+  closedAt   DateTime?
+
+  sourceUrl String
+
+  status OpportunityStatus @default(UPCOMING)
+
+  lastVerifiedAt DateTime?
+  fingerprint    String?
+
+  isActive  Boolean  @default(true)
+  viewCount Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company            Company              @relation(fields: [companyId], references: [id])
+  source             Source               @relation(fields: [sourceId], references: [id])
+  skills             OpportunitySkill[]
+  savedBy            SavedOpportunity[]
+  notifications      Notification[]
+  events             OpportunityEvent[]
+  applicationClicks  ApplicationClick[]
+  markedApplications MarkedApplication[]
+
+  @@index([status])
+  @@index([opportunityType])
+  @@index([deadline])
+  @@index([companyId])
+  @@index([sourceId])
+  @@index([postedAt])
+  @@index([location])
+  @@index([graduationYear])
+  @@index([slug])
+  @@index([fingerprint])
+  @@map("opportunities")
+}
+
+model Skill {
+  id   String @id @default(cuid())
+  name String @unique
+  slug String @unique
+
+  opportunities     OpportunitySkill[]
+  userPreferences   UserPreferenceSkill[]
+
+  @@index([slug])
+  @@map("skills")
+}
+
+model OpportunitySkill {
+  opportunityId String
+  skillId       String
+
+  opportunity Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  skill       Skill       @relation(fields: [skillId], references: [id])
+
+  @@id([opportunityId, skillId])
+  @@map("opportunity_skills")
+}
+
+model UserPreference {
+  id     String @id @default(cuid())
+  userId String @unique
+
+  preferredOpportunityTypes OpportunityType[]
+  preferredRoles            String[]
+  preferredLocations        String[]
+  preferredWorkModes        WorkMode[]
+
+  minimumSalary  Float?
+  minimumStipend Float?
+
+  graduationYear Int?
+
+  emailNotifications Boolean @default(true)
+  pushNotifications  Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user   User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skills UserPreferenceSkill[]
+
+  @@map("user_preferences")
+}
+
+model UserPreferenceSkill {
+  preferenceId String
+  skillId      String
+
+  preference UserPreference @relation(fields: [preferenceId], references: [id], onDelete: Cascade)
+  skill      Skill          @relation(fields: [skillId], references: [id])
+
+  @@id([preferenceId, skillId])
+  @@map("user_preference_skills")
+}
+
+model SavedOpportunity {
+  id            String @id @default(cuid())
+  userId        String
+  opportunityId String
+  createdAt DateTime @default(now())
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  opportunity Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, opportunityId])
+  @@index([userId])
+  @@map("saved_opportunities")
+}
+
+model FollowedCompany {
+  id        String @id @default(cuid())
+  userId    String
+  companyId String
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, companyId])
+  @@index([userId])
+  @@index([companyId])
+  @@map("followed_companies")
+}
+
+model Notification {
+  id            String           @id @default(cuid())
+  userId        String
+  opportunityId String?
+  companyId     String?
+
+  type    NotificationType
+  title   String
+  message String
+
+  isRead    Boolean  @default(false)
+  sentAt    DateTime?
+  createdAt DateTime @default(now())
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  opportunity Opportunity? @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
+  company     Company?     @relation(fields: [companyId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+model NotificationPreference {
+  id     String @id @default(cuid())
+  userId String @unique
+
+  newOpportunityEmail   Boolean @default(true)
+  deadlineReminderEmail Boolean @default(true)
+  companyHiringEmail    Boolean @default(true)
+
+  deadline24Hours   Boolean @default(true)
+  deadline1Hour     Boolean @default(false)
+  deadline30Minutes Boolean @default(false)
+  deadline5Minutes  Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notification_preferences")
+}
+
+model OpportunityEvent {
+  id            String               @id @default(cuid())
+  opportunityId String
+
+  eventType OpportunityEventType
+  oldStatus OpportunityStatus?
+  newStatus OpportunityStatus?
+  metadata  Json?
+
+  createdAt DateTime @default(now())
+
+  opportunity Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  @@index([opportunityId])
+  @@index([eventType])
+  @@index([createdAt])
+  @@map("opportunity_events")
+}
+
+model ApplicationClick {
+  id            String @id @default(cuid())
+  userId        String?
+  opportunityId String
+  clickedAt DateTime @default(now())
+
+  user        User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  opportunity Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  @@index([opportunityId])
+  @@index([userId])
+  @@index([clickedAt])
+  @@map("application_clicks")
+}
+
+model MarkedApplication {
+  id            String @id @default(cuid())
+  userId        String
+  opportunityId String
+  markedAt DateTime @default(now())
+  notes    String?
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  opportunity Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, opportunityId])
+  @@index([userId])
+  @@map("marked_applications")
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
